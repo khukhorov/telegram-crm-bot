@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.9
 
 # Необхідні пакети для Dlib та face_recognition
 RUN apt-get update \
