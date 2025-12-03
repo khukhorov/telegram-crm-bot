@@ -22,9 +22,9 @@ dp = Dispatcher()
 # --- Створення Клавіатури Меню ---
 MENU_KEYBOARD = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="/add_client"), KeyboardButton(text="/search_client")],
-        # Додана кнопка 'Скасувати' для зручності
-        [KeyboardButton(text="/cancel")]
+        # Оновлені кнопки з емодзі та повним текстом
+        [KeyboardButton(text="➕ Новий клієнт"), KeyboardButton(text="🔍 Пошук клієнта")],
+        [KeyboardButton(text="❌ Скасувати")]
     ],
     resize_keyboard=True,
     one_time_keyboard=False
