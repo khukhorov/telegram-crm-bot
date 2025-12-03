@@ -5,26 +5,26 @@ from aiogram.filters import Command
 
 from config import settings
 import database as db
-# import face_processor as fp # Тут буде логіка обробки облич
 
+# Налаштування логування
 logging.basicConfig(level=logging.INFO)
 
 # Ініціалізація
 bot = Bot(token=settings.BOT_TOKEN)
 dp = Dispatcher()
 
-# --- ОБРОБНИКИ ---
+# --- ОБРОБНИКИ (Handlers) ---
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    """Обробник команди /start"""
+    """Обробник команди /start. Перевіряє роботу БД."""
     await message.answer("CRM-бот запущено! База даних PostgreSQL успішно підключена. Спробуйте /add.")
 
 @dp.message(Command("add"))
 async def cmd_add(message: types.Message):
     """Обробник команди /add (початок додавання клієнта)"""
     await message.answer("Щоб додати нового клієнта, надішліть його фотографію.")
-    # Тут має бути перехід до стану FSM
+    # Тут буде перехід до стану FSM
 
 @dp.message()
 async def unhandled_message(message: types.Message):
@@ -32,9 +32,10 @@ async def unhandled_message(message: types.Message):
     if message.text:
         await message.answer(f"Невідома команда чи текст. Я не знаю, що робити з: {message.text}")
     elif message.photo:
-        await message.answer("Я отримав ваше фото. Для його обробки потрібна повна логіка Face Recognition та налаштування сховища Spaces!")
+        await message.answer("Я отримав ваше фото. Для його обробки потрібна повна логіка Face Recognition!")
     else:
         await message.answer("Я отримав нерозпізнане повідомлення.")
+
 
 # ----------------------------------------
 
@@ -47,11 +48,9 @@ async def main():
         logging.error("Критична помилка: Не вдалося підключитися до бази даних. Бот не запускається.")
         return
         
-    # 2. АІОGRAM 3.Х: Реєстрація всіх обробників, визначених у цьому файлі
-    dp.include_router(dp) 
-
+    # 2. Aiogram 3.x: Запуск опитування.
+    # Обробники (@dp.message) вже зареєстровані, тому додатковий виклик dp.include_router не потрібен.
     logging.info("Starting bot polling...")
-    # 3. Запуск опитування (Polling)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
