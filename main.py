@@ -1,26 +1,4 @@
-import asyncio
-import logging
-from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command
-
-from config import settings # <<< ІМПОРТУЄМО НОВИЙ ФАЙЛ
-import database as db
-
-# Налаштування логування
-logging.basicConfig(level=logging.INFO)
-
-# Ініціалізація
-bot = Bot(token=settings.BOT_TOKEN)
-dp = Dispatcher()
-
-# --- ПРИКЛАД ОБРОБНИКА ---
-
-@dp.message(Command("start"))
-async def cmd_start(message: types.Message):
-    """Обробник команди /start"""
-    await message.answer("CRM-бот запущено! База даних PostgreSQL успішно підключена.")
-    
-# --- ТУТ БУДЕ ВАШ ОБРОБНИК ФОТО та FSM ---
+# ... (весь ваш код до функції main)
 
 # ----------------------------------------
 
@@ -32,6 +10,10 @@ async def main():
     except Exception:
         logging.error("Критична помилка: Не вдалося підключитися до бази даних. Бот не запускається.")
         return
+
+    # >>>>> КРИТИЧНО ВАЖЛИВИЙ РЯДОК: ВКЛЮЧЕННЯ ВСІХ ВБУДОВАНИХ РОУТЕРІВ <<<<<
+    # Це змушує Dispatcher побачити обробники, які ви визначили вище (@dp.message)
+    dp.include_router(dp) 
 
     logging.info("Starting bot polling...")
     await dp.start_polling(bot)
