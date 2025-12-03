@@ -3,7 +3,7 @@ from config import settings
 from io import BytesIO
 import logging
 import os
-import asyncio # <<< ДОДАНО ДЛЯ АСИНХРОННОЇ ОБРОБКИ БЛОКУЮЧИХ ВИКЛИКІВ
+import asyncio # КЛЮЧОВИЙ ІМПОРТ
 
 logging.basicConfig(level=logging.INFO)
 
@@ -29,7 +29,7 @@ async def upload_photo_to_spaces(file_data: BytesIO, filename: str) -> str:
     try:
         file_data.seek(0)
         
-        # ВИКОРИСТОВУЄМО asyncio.to_thread ДЛЯ ПЕРЕНЕСЕННЯ БЛОКУЮЧОГО КОДУ В ОКРЕМИЙ ПОТІК
+        # ВИКОРИСТАННЯ asyncio.to_thread для безпечного виклику блокуючого boto3
         await asyncio.to_thread(
             s3_client.upload_fileobj,
             file_data,
