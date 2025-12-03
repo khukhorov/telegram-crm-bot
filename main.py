@@ -1,9 +1,10 @@
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command, StateFilter # Додано StateFilter
+# ВАЖЛИВО: ДОДАНО F до імпортів!
+from aiogram import Bot, Dispatcher, types, F 
+from aiogram.filters import Command, StateFilter 
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import default_state # Додано default_state
+from aiogram.fsm.state import default_state 
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton 
 
 from config import settings
@@ -12,6 +13,8 @@ import s3_storage
 import client_fsm as cfsm 
 
 logging.basicConfig(level=logging.INFO)
+# ... (решта коду без змін)
+
 
 bot = Bot(token=settings.BOT_TOKEN)
 dp = Dispatcher()
