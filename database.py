@@ -5,18 +5,13 @@ import logging
 import re
 from typing import List, Dict, Any, Union
 
+# ІМПОРТУЄМО ФУНКЦІЮ НОРМАЛІЗАЦІЇ З ВАШОГО ОКРЕМОГО ФАЙЛУ
+from data_cleaner import normalize_phone_number 
+
 db_pool = None
 logging.basicConfig(level=logging.INFO)
 
-# --- УТИЛІТА: Нормалізація номера телефону (для внутрішнього використання) ---
-def _normalize_phone_number(raw_number: str) -> str:
-    """Видаляє всі символи, крім цифр та знака '+', залишаючи '+' на початку."""
-    cleaned_number = re.sub(r'[^0-9\+]', '', raw_number)
-    if cleaned_number.startswith('++'):
-        cleaned_number = '+' + cleaned_number.lstrip('+')
-    return cleaned_number
-# ---------------------------------------------
-
+# --- УТИЛІТА: (Попередня функція нормалізації ВИДАЛЕНА) ---
 
 async def init_db():
     """Створює пул підключень до PostgreSQL та ініціалізує таблиці."""
@@ -29,7 +24,7 @@ async def init_db():
         async with db_pool.acquire() as connection:
             await connection.execute("""
                 CREATE TABLE IF NOT EXISTS clients (
-                    id SERIAL PRIMARY PRIMARY KEY,
+                    id SERIAL PRIMARY KEY,
                     telegram_id BIGINT UNIQUE NOT NULL,
                     phone JSONB, 
                     comment TEXT,
@@ -70,7 +65,8 @@ async def find_client_by_query(query: str) -> List[Dict[str, Any]]:
     if not db_pool:
         raise Exception("Database pool is not initialized.")
 
-    search_term = _normalize_phone_number(query)
+    # ВИКОРИСТАННЯ ЗОВНІШНЬОЇ ФУНКЦІЇ НОРМАЛІЗАЦІЇ
+    search_term = normalize_phone_number(query)
     
     comment_param = f"%{query}%"
     phone_param = f"%{search_term}%" 
@@ -135,10 +131,9 @@ async def delete_client(db_id: int) -> bool:
         return result == 'DELETE 1'
         
 async def get_all_encodings():
-    """Отримує всі енкодинги з БД для пошуку по фото (залишено для face_recognition)."""
+    """Залишено як заглушка."""
     if not db_pool:
         raise Exception("Database pool is not initialized.")
-    # ... (старий код для отримання енкодингів) ...
     async with db_pool.acquire() as connection:
         records = await connection.fetch("SELECT id, telegram_id, phone, comment, face_encoding, photo_url FROM clients")
         
