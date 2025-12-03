@@ -1,8 +1,8 @@
 import boto3
-import os
 from config import settings
 from io import BytesIO
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
 
@@ -14,37 +14,24 @@ s3_client = boto3.client(
     aws_secret_access_key=settings.SPACES_SECRET_KEY
 )
 
+def get_photo_url(filename: str) -> str:
+    """Формує публічну URL-адресу файлу."""
+    endpoint = settings.SPACES_ENDPOINT_URL.rstrip('/')
+    return f"{endpoint}/{settings.SPACES_BUCKET_NAME}/{filename}"
+
+
 async def upload_photo_to_spaces(file_data: BytesIO, filename: str) -> str:
     """Завантажує файл на DigitalOcean Spaces та повертає його URL."""
     try:
+        file_data.seek(0)
         s3_client.upload_fileobj(
             file_data,
             settings.SPACES_BUCKET_NAME,
             filename,
-            # Дозволяємо публічний доступ до файлу (щоб Telegram міг його відобразити)
             ExtraArgs={'ACL': 'public-read', 'ContentType': 'image/jpeg'} 
         )
-        # Формуємо публічну URL-адресу для зберігання у PostgreSQL
-        url = f"{settings.SPACES_ENDPOINT_URL}/{settings.SPACES_BUCKET_NAME}/{filename}"
-        logging.info(f"Photo uploaded to Spaces: {url}")
-        return url
+        return get_photo_url(filename)
         
     except Exception as e:
         logging.error(f"Error uploading to Spaces: {e}")
-        return None
-
-# Функція для отримання фотографії (якщо потрібно буде завантажити її назад)
-async def get_photo_from_spaces(filename: str) -> BytesIO:
-    """Отримує файл з Spaces."""
-    try:
-        file_buffer = BytesIO()
-        s3_client.download_fileobj(
-            settings.SPACES_BUCKET_NAME,
-            filename,
-            file_buffer
-        )
-        file_buffer.seek(0)
-        return file_buffer
-    except Exception as e:
-        logging.error(f"Error downloading from Spaces: {e}")
         return None
