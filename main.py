@@ -1,14 +1,15 @@
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter # Додано StateFilter
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import default_state # Додано default_state
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton 
 
 from config import settings
 import database as db
 import s3_storage 
-import client_fsm as cfsm # <<< ІМПОРТУЄМО РОУТЕР
+import client_fsm as cfsm 
 
 logging.basicConfig(level=logging.INFO)
 
@@ -18,8 +19,9 @@ dp = Dispatcher()
 # --- Створення Клавіатури Меню ---
 MENU_KEYBOARD = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="/add_client")],
-        [KeyboardButton(text="/search_client")]
+        [KeyboardButton(text="/add_client"), KeyboardButton(text="/search_client")],
+        # Додана кнопка 'Скасувати' для зручності
+        [KeyboardButton(text="/cancel")]
     ],
     resize_keyboard=True,
     one_time_keyboard=False
@@ -27,7 +29,7 @@ MENU_KEYBOARD = ReplyKeyboardMarkup(
 
 # --- ОСНОВНІ ОБРОБНИКИ ---
 
-@dp.message(Command("start"))
+@dp.message(Command("start"), StateFilter(default_state))
 async def cmd_start(message: types.Message):
     """Обробник команди /start. Відправляє головне меню."""
     await message.answer(
@@ -35,19 +37,36 @@ async def cmd_start(message: types.Message):
         reply_markup=MENU_KEYBOARD 
     )
 
-# ... (інші заглушки тут можна прибрати, оскільки вони в cfsm.py) ...
+@dp.message(Command("cancel"), ~StateFilter(default_state))
+@dp.message(F.text.lower() == "скасувати", ~StateFilter(default_state))
+async def cmd_cancel(message: types.Message, state: FSMContext):
+    """
+    ЗМІНА 1: Обробник команди /cancel або кнопки 'Скасувати' для виходу зі стану FSM.
+    Працює, лише якщо бот НЕ перебуває у default_state.
+    """
+    await state.clear()
+    await message.answer(
+        "Дія скасована. Повертаємося до головного меню.",
+        reply_markup=MENU_KEYBOARD 
+    )
+
 
 async def main():
     """Головна функція запуску бота."""
+    # 1. Ініціалізація БД
     try:
         await db.init_db() 
+        # Якщо використовуєте s3_storage, його ініціалізацію можна додати тут
+        # s3_storage.init_client() 
     except Exception:
         logging.error("Критична помилка: Не вдалося підключитися до бази даних. Бот не запускається.")
         return
         
-    # КРИТИЧНО ВАЖЛИВО: ВКЛЮЧАЄМО РОУТЕР З FSM ЛОГІКОЮ
+    # 2. ВКЛЮЧАЄМО РОУТЕРИ
+    # Роутер з FSM логікою клієнтів
     dp.include_router(cfsm.router) 
-
+    
+    # 3. Запуск
     logging.info("Starting bot polling...")
     await dp.start_polling(bot)
 
