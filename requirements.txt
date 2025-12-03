@@ -1,5 +1,6 @@
-aiogram>=3.0
-face_recognition
-numpy
-opencv-python-headless
-aiosqlite
+aiogram>=3.0          # Фреймворк для бота
+face_recognition      # Бібліотека для розпізнавання облич
+python-dotenv         # Для читання ключів (BOT_TOKEN, DATABASE_URL)
+asyncpg               # <<< КЛЮЧОВЕ: Нова бібліотека для PostgreSQL
+numpy                 # Залишаємо. Потрібна для роботи з числовими масивами (енкодингами).
+opencv-python-headless # Залишаємо. Потрібна для роботи з зображеннями у серверному режимі.
