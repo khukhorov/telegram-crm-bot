@@ -1,23 +1,18 @@
 import uuid
-import face_recognition
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import (
-    Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile, 
-    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+    Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 )
-from io import BytesIO
 import logging
-import numpy as np
-import re
 from typing import List, Dict, Any, Union
 
 from config import settings
 import database as db
 import s3_storage
-from Data_cleaner import normalize_phone_number # Імпорт функції нормалізації
+from Data_cleaner import normalize_phone_number 
 
 router = Router()
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +24,7 @@ class ClientStates(StatesGroup):
     waiting_for_phone = State()
     waiting_for_comment = State()
     
-    # Пошук (Уніфікований)
+    # Пошук (Тільки текст)
     waiting_for_search_query = State()
     
     # Редагування
@@ -68,12 +63,6 @@ def format_client_info(client: Dict[str, Any]) -> str:
         f"🔗 Кількість фото: {len(client['photo_url']) if client['photo_url'] else 0}"
     )
 
-async def find_face_match(bot: Bot, photo_file_id: str) -> Union[Dict[str, Any], None]:
-    """Завантажує фото, робить енкодинг та шукає збіг у БД (скорочено)."""
-    # (Повна логіка face_recognition тут, не змінюємо)
-    # ... (код face_recognition) ...
-    return None # Заглушка для прикладу
-
 # --- 1. ЛОГІКА ДОДАВАННЯ ---
 
 @router.message(Command("add_client"))
@@ -85,14 +74,21 @@ async def start_registration(message: Message, state: FSMContext):
 
 @router.message(ClientStates.waiting_for_photo, F.photo)
 async def process_photo_for_add(message: Message, state: FSMContext, bot: Bot):
-    # >>> СИМУЛЯЦІЯ ОБРОБКИ
-    client_encoding_list = [0.1] * 128
+    """Завантажує фото на S3 і зберігає порожній енкодинг."""
+    
+    # Завантаження фото
+    photo_file = await bot.get_file(message.photo[-1].file_id)
+    file_io = await bot.download_file(photo_file.file_path)
+    
     filename = f"{message.from_user.id}_{uuid.uuid4()}.jpg"
-    photo_url = f"https://s3.url/{filename}"
-    # >>> КІНЕЦЬ СИМУЛЯЦІЇ
+    photo_url = await s3_storage.upload_photo_to_spaces(file_io, filename)
+    
+    if not photo_url:
+        await message.answer("❌ Не вдалося завантажити фотографію. Спробуйте ще раз.")
+        return
     
     await state.update_data(
-        face_encoding=client_encoding_list,
+        face_encoding=[], # Порожній енкодинг, оскільки пошук по обличчю вимкнено
         photo_urls=[photo_url],
         telegram_id=message.from_user.id 
     )
@@ -111,7 +107,7 @@ async def process_phone(message: Message, state: FSMContext):
         await message.answer("Некоректний формат номера. Введіть його ще раз.")
         return
         
-    await state.update_data(phone_numbers=[phone]) # Зберігаємо НОРМАЛІЗОВАНИЙ номер
+    await state.update_data(phone_numbers=[phone]) 
     await message.answer("Дякую. Додайте **коментар** про клієнта.")
     await state.set_state(ClientStates.waiting_for_comment)
 
@@ -121,12 +117,13 @@ async def process_comment_and_save(message: Message, state: FSMContext):
     comment = message.text.strip()
     user_data = await state.get_data()
     
+    # При збереженні face_encoding_array = []
     await db.add_client(
         telegram_id=user_data.get('telegram_id'), 
         phone=user_data.get('phone_numbers'),
         comment=comment,
-        face_encoding_array=user_data.get('face_encoding'),
-        photo_url=user_data.get('photo_urls')
+        face_encoding_array=user_data.get('face_encoding', []),
+        photo_url=user_data.get('photo_urls', [])
     )
     
     await message.answer("✅ **Клієнта успішно зареєстровано!**")
@@ -136,8 +133,9 @@ async def process_comment_and_save(message: Message, state: FSMContext):
 
 @router.message(Command("search_client"))
 async def start_search(message: Message, state: FSMContext):
+    # Тепер просимо лише текст, оскільки пошук по фото вимкнено
     await state.clear()
-    await message.answer("Надішліть **текст** (номер, його частину або ключове слово з коментаря) або **фото** для пошуку клієнта.")
+    await message.answer("Надішліть **текст** (номер, його частину або ключове слово з коментаря) для пошуку клієнта.")
     await state.set_state(ClientStates.waiting_for_search_query)
 
 
@@ -162,7 +160,7 @@ async def process_search_query(message: Message, state: FSMContext):
         for i, client in enumerate(found_clients[:5]): 
             phones = ", ".join(client['phone']) if client['phone'] else "Не вказано"
             response += f"**{i+1}. ID:{client['id']}**: 📞{phones}, 📝{client['comment'][:20]}...\n"
-        response += "\nБудь ласка, уточніть запит."
+        response += "\nБудь ла ласка, уточніть запит."
         await message.answer(response)
         await state.clear()
     
@@ -177,32 +175,14 @@ async def process_search_query(message: Message, state: FSMContext):
         await message.answer(format_client_info(client))
         await state.set_state(ClientStates.waiting_for_edit_select)
 
-
-@router.message(ClientStates.waiting_for_search_query, F.photo)
-async def process_search_photo(message: Message, state: FSMContext, bot: Bot):
-    """Пошук клієнта за фото."""
-    client_data = await find_face_match(bot, message.photo[-1].file_id)
-    
-    if not client_data:
-        await message.answer("❌ За наданою фотографією збігів не знайдено.")
-        await state.clear()
-        return
-
-    client_id = client_data['id'] 
-    await state.update_data(found_client_data=client_data)
-
-    await message.answer(
-        "✅ Знайдено єдиного клієнта за фото. Що далі?",
-        reply_markup=create_edit_inline_keyboard(client_id)
-    )
-    await message.answer(format_client_info(client_data))
-    await state.set_state(ClientStates.waiting_for_edit_select)
+# Хендлер пошуку за фото (process_search_photo) ВИДАЛЕНО
     
 # --- 3. ЛОГІКА РЕДАГУВАННЯ ---
 
-# 3.1. Додати номер
+# 3.1. Додати номер (БЕЗ ЗМІН)
 @router.callback_query(F.data.startswith("edit_phone_"))
 async def start_add_phone(call: CallbackQuery, state: FSMContext):
+    # ... (існуюча логіка)
     db_id = int(call.data.split('_')[-1])
     await state.update_data(client_id_to_edit=db_id)
     await call.message.edit_text("Введіть **новий номер** телефону (буде доданий до існуючих):")
@@ -211,6 +191,7 @@ async def start_add_phone(call: CallbackQuery, state: FSMContext):
 
 @router.message(ClientStates.waiting_for_new_phone)
 async def process_new_phone(message: Message, state: FSMContext):
+    # ... (існуюча логіка)
     raw_phone = message.text
     new_phone = normalize_phone_number(raw_phone)
     
@@ -236,9 +217,10 @@ async def process_new_phone(message: Message, state: FSMContext):
     await message.answer(f"✅ Номер **{new_phone}** успішно додано до клієнта ID:{db_id}.")
     await state.clear()
 
-# 3.2. Змінити коментар
+# 3.2. Змінити коментар (БЕЗ ЗМІН)
 @router.callback_query(F.data.startswith("edit_comment_"))
 async def start_edit_comment(call: CallbackQuery, state: FSMContext):
+    # ... (існуюча логіка)
     db_id = int(call.data.split('_')[-1])
     await state.update_data(client_id_to_edit=db_id)
     await call.message.edit_text("Введіть **новий коментар/примітки** для клієнта:")
@@ -247,6 +229,7 @@ async def start_edit_comment(call: CallbackQuery, state: FSMContext):
 
 @router.message(ClientStates.waiting_for_new_comment)
 async def process_new_comment(message: Message, state: FSMContext):
+    # ... (існуюча логіка)
     new_comment = message.text.strip()
     data = await state.get_data()
     db_id = data.get('client_id_to_edit')
@@ -264,9 +247,10 @@ async def process_new_comment(message: Message, state: FSMContext):
     await message.answer(f"✅ Коментар для клієнта ID:{db_id} успішно оновлено.")
     await state.clear()
 
-# 3.3. Додати фото
+# 3.3. Додати фото (ОНОВЛЕНА ЛОГІКА)
 @router.callback_query(F.data.startswith("edit_photo_"))
 async def start_add_photo(call: CallbackQuery, state: FSMContext):
+    # БЕЗ ЗМІН
     db_id = int(call.data.split('_')[-1])
     await state.update_data(client_id_to_edit=db_id)
     await call.message.edit_text("Надішліть **нову фотографію обличчя** для додавання до профілю клієнта.")
@@ -275,12 +259,21 @@ async def start_add_photo(call: CallbackQuery, state: FSMContext):
 
 @router.message(ClientStates.waiting_for_new_photo, F.photo)
 async def process_new_photo(message: Message, state: FSMContext, bot: Bot):
-    # >>> СИМУЛЯЦІЯ ОБРОБКИ та S3
+    """Оновлено: Завантаження фото на S3 без розрахунку енкодингу."""
     data = await state.get_data()
     db_id = data.get('client_id_to_edit')
+    
+    # Завантаження фото
+    photo_file = await bot.get_file(message.photo[-1].file_id)
+    file_io = await bot.download_file(photo_file.file_path)
+    
     filename = f"{db_id}_{uuid.uuid4()}.jpg"
-    new_photo_url = f"https://s3.url/{filename}"
-    # >>> КІНЕЦЬ СИМУЛЯЦІЇ
+    new_photo_url = await s3_storage.upload_photo_to_spaces(file_io, filename)
+    
+    if not new_photo_url:
+        await message.answer("❌ Не вдалося завантажити фотографію. Спробуйте ще раз.")
+        await state.clear()
+        return
     
     client = await db.find_client_by_id(db_id)
     if not client:
@@ -291,6 +284,7 @@ async def process_new_photo(message: Message, state: FSMContext, bot: Bot):
     updated_photos = client['photo_url']
     updated_photos.append(new_photo_url)
     
+    # Оновлення даних
     await db.update_client_data(
         db_id, client['phone'], client['comment'], updated_photos
     )
@@ -298,9 +292,10 @@ async def process_new_photo(message: Message, state: FSMContext, bot: Bot):
     await message.answer(f"✅ Нова фотографія успішно додана до профілю клієнта ID:{db_id}.")
     await state.clear()
     
-# 3.4. Видалити клієнта
+# 3.4. Видалити клієнта (БЕЗ ЗМІН)
 @router.callback_query(F.data.startswith("delete_client_"))
 async def confirm_delete_client(call: CallbackQuery, state: FSMContext):
+    # ... (існуюча логіка)
     db_id = int(call.data.split('_')[-1])
     
     was_deleted = await db.delete_client(db_id)
@@ -312,5 +307,3 @@ async def confirm_delete_client(call: CallbackQuery, state: FSMContext):
         
     await state.clear()
     await call.answer()
-
-# *** ВИДАЛЕНО: Хендлер Command("cancel") та F.text == "Скасувати" перенесено в main.py ***
