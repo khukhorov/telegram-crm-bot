@@ -1,7 +1,6 @@
-# Використовуємо повний Python-образ (не -slim!)
 FROM python:3.9
 
-# Встановлюємо системні залежності 
+# Вся інструкція RUN має бути єдиним блоком
 RUN apt-get update && apt-get install -y \
     cmake \
     libsm6 \
@@ -10,17 +9,14 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     build-essential \
     pkg-config \
-    libpq-dev \  # <<< ДЛЯ asyncpg
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Копіюємо список залежностей та встановлюємо їх
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копіюємо весь код проєкту
 COPY . .
 
-# Команда запуску
 CMD ["python", "main.py"]
