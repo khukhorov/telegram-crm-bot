@@ -313,8 +313,4 @@ async def confirm_delete_client(call: CallbackQuery, state: FSMContext):
     await state.clear()
     await call.answer()
 
-@router.message(Command("cancel"))
-@router.message(F.text == "Скасувати")
-async def cmd_cancel(message: Message, state: FSMContext):
-    await state.clear()
-    await message.answer("Дію скасовано. Можете почати знову.")
+# *** ВИДАЛЕНО: Хендлер Command("cancel") та F.text == "Скасувати" перенесено в main.py ***
